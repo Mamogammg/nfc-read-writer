@@ -22,8 +22,9 @@
     Card Emulation (HCE) are not supported within the current scope.
     </p>
     
---><button id="scanButton">Scan</button>
-    <button id="writeButton">Write</button>
+-->
+    <button id="scanButton" style="display: none;">Scan</button>
+    <button id="writeButton" style="display: none;">Write</button>
     <!--<button id="makeReadOnlyButton">Make Read-Only</button> -->
     
     <script>
@@ -56,14 +57,18 @@
       };
     </script>
     
-    <h3>Live Output</h3>
-    <div id="output" class="output">
+    <!--<h3>Live Output</h3>-->
+    <div id="output" class="output" style="display: none;">
       <div id="content"></div>
       <div id="status">Web NFC is not available. Use Chrome on Android.</div>
       <pre id="log"></pre>
     </div>
 
-    <p id="amiibo"></p>
+    <div>
+      <input id="send">
+      <button id="stateChanger">Reading</button>
+    </div>
+    <p id="chat"></p>
     
     
     <script>
@@ -89,12 +94,12 @@
       
         
           <script>
+        const ndef = new NDEFReader();
     scanButton.addEventListener("click",start)
             async function start() {
       log("User clicked scan button");
     
       try {
-        const ndef = new NDEFReader();
         await ndef.scan();
         log("> Scan started");
     
@@ -103,11 +108,15 @@
         });
     
         ndef.addEventListener("reading", ({ message, serialNumber }) => {
-          log(`> Serial Number: ${serialNumber}`);
+          if (document.getElementById("stateChanger").innerText == "Reading") {
           var records = message.records
-          log(`> Records: (${records.length})`);
+          log(`> Serial Number: ${serialNumber}`);
+          log(`> Records: (${message.records.length})`);
           for (const record of records) {
-            log(`> Record ${records.indexOf(record)}: ${record}`)            
+            const decoder = new TextDecoder()
+            log(`> Record ${records.indexOf(record)}: ${decoder.decode(record.data)}`)
+            document.getElementById("chat").innerText += "\nOther: " + decoder.decode(record.data)
+          }
           }
         });
       } catch (error) {
@@ -121,12 +130,40 @@
       log("User clicked write button");
     
       try {
-        const ndef = new NDEFReader();
-        await ndef.write("Hello world!");
+        if (document.getElementById("stateChanger").innerText === "Writing") {
+      controller = new AbortController(); // Crear un nuevo controlador para cada escritura
+
+      // Lanzar la escritura NFC con una señal de cancelación
+      const writePromise = ndef.write(document.getElementById("send").value, { signal: controller.signal });
+
+      // Monitorear si el estado cambia a "Reading" y cancelar la operación
+      const monitorState = new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (document.getElementById("stateChanger").innerText === "Reading") {
+            controller.abort(); // Cancelar la operación
+            log("Write operation aborted due to state change.");
+            clearInterval(interval);
+            resolve();
+          }
+        }, 100); // Verificar cada 100ms
+      });
+
+      await Promise.race([writePromise, monitorState]); // Ejecutar ambas promesas en carrera
+
+      if (document.getElementById("stateChanger").innerText !== "Reading") {
         log("> Message written");
-      } catch (error) {
-        log("Argh! " + error);
+        document.getElementById("chat").innerText += "\nYou: " + document.getElementById("send").value;
+        document.getElementById("stateChanger").innerText = "Reading";
+        scanButton.click();
       }
+    }
+  } catch (error) {
+    if (error.name === "AbortError") {
+      log("Write operation was aborted.");
+    } else {
+      log("Argh! " + error);
+    }
+  }
     });
     
     makeReadOnlyButton.addEventListener("click", async () => {
@@ -140,6 +177,18 @@
         log("Argh! " + error);
       }
     });
+    </script>
+
+    <script>
+      document.getElementById("stateChanger").addEventListener("click", function(evt) {
+        if (evt.target.innerText == "Reading") {
+          evt.target.innerText = "Writing"
+          writeButton.click()
+        } else {
+          evt.target.innerText = "Reading"
+          scanButton.click()
+        }
+      })
     </script>
       
     
