@@ -104,7 +104,8 @@
     
         ndef.addEventListener("reading", ({ message, serialNumber }) => {
           log(`> Serial Number: ${serialNumber}`);
-          log(`> Records: (${message.records.length})`);
+          var records = message.records
+          log(`> Records: (${records.length})`);
           for (const record of records) {
             log(`> Record ${records.indexOf(record)}: ${record}`)            
           }
